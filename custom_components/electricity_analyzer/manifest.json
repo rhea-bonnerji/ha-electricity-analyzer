@@ -1,0 +1,27 @@
+{
+  "domain": "electricity_analyzer",
+  "name": "Electricity Analyzer",
+  "version": "1.0.4",
+  "documentation": "https://github.com/rhea-bonnerji/ha-electricity-analyzer",
+  "issue_tracker": "https://github.com/rhea-bonnerji/ha-electricity-analyzer/issues",
+  "codeowners": ["@rhea-bonnerji"],
+  "config_flow": true,
+  "single_config_entry": true,
+  "dependencies": [
+    "recorder",
+    "energy",
+    "lovelace",
+    "frontend",
+    "http",
+    "persistent_notification",
+    "websocket_api"
+  ],
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "loggers": [
+    "custom_components.electricity_analyzer"
+  ],
+  "requirements": [
+    "beautifulsoup4==4.15.0"
+  ]
+}

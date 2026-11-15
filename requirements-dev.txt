@@ -1,0 +1,13 @@
+# Development and test dependencies (Python 3.14).
+#
+#   uv venv --python 3.14 .venv-ha
+#   uv pip install --python .venv-ha/bin/python -r requirements-dev.txt
+#
+# The integration's own runtime requirement is declared in its manifest.json.
+
+homeassistant==2026.9.2
+pytest-homeassistant-custom-component
+# The dashboard registers a Lovelace panel, so tests set up `frontend`.
+home-assistant-frontend
+beautifulsoup4
+pyyaml

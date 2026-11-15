@@ -1,0 +1,137 @@
+refresh_esb:
+
+rebuild:
+  fields:
+    dashboard:
+      default: false
+      selector:
+        boolean:
+
+set_meter_reading:
+  fields:
+    day:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 999999
+          mode: box
+          unit_of_measurement: kWh
+    night:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 999999
+          mode: box
+          unit_of_measurement: kWh
+    taken_at:
+      selector:
+        datetime:
+
+submit_meter_reading:
+  fields:
+    confirm:
+      required: true
+      default: false
+      selector:
+        boolean:
+    day:
+      selector:
+        number:
+          min: 0
+          max: 999999
+          mode: box
+    night:
+      selector:
+        number:
+          min: 0
+          max: 999999
+          mode: box
+    force:
+      default: false
+      selector:
+        boolean:
+
+add_tariff:
+  fields:
+    valid_from:
+      required: true
+      selector:
+        date:
+    valid_to:
+      selector:
+        date:
+    day_rate:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 200
+          step: any
+          mode: box
+          unit_of_measurement: c/kWh
+    night_rate:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 200
+          step: any
+          mode: box
+          unit_of_measurement: c/kWh
+    standing_charge:
+      selector:
+        number:
+          min: 0
+          max: 2000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€/year"
+    pso_levy:
+      selector:
+        number:
+          min: -500
+          max: 500
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€/year"
+    night_start:
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    night_end:
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    night_clock:
+      selector:
+        select:
+          options:
+            - gmt
+            - local
+    supplier:
+      selector:
+        text:
+    plan:
+      selector:
+        text:
+
+supply_esb_session:
+  fields:
+    cookie:
+      required: true
+      selector:
+        text:
+          multiline: true
+
+export_csv:
+  fields:
+    backup:
+      default: false
+      selector:
+        boolean:

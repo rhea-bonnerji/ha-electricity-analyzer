@@ -1,0 +1,510 @@
+<!doctype html>
+<!--
+  Manual test harness for custom_components/electricity_analyzer/frontend/electricity-analyzer-data-card.js
+
+  Open this file directly in a browser (file:// works: the card is loaded as a classic
+  script, which it supports), or serve the repository root and open /dev/card-harness.html:
+
+      python3 -m http.server 8000      # from the repository root
+
+  Everything here is fake: `hass.callWS` answers the two websocket commands with
+  generated, deterministic data shaped like engine/tables.py output (same column keys,
+  groups, decimals, UTC hour keys, a live "partial" newest row, ESB lagging two days,
+  null start/end for "everything"). Requests that break the contract are rejected with
+  an error so card bugs show up on screen.
+
+  The toolbar switches light/dark, locale, backend behaviour and latency. A new hass
+  object is pushed to every card once a second, like Home Assistant does on state
+  changes; the callWS counter shows the card does not refetch because of that.
+  window.harness exposes the same controls for scripted checks.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Electricity Analyzer data card · harness</title>
+<style>
+  :root {
+    --primary-color: #03a9f4;
+    --text-primary-color: #ffffff;
+    --primary-background-color: #fafafa;
+    --secondary-background-color: #e5e5e5;
+    --card-background-color: #ffffff;
+    --ha-card-background: #ffffff;
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --divider-color: rgba(0, 0, 0, 0.12);
+    --error-color: #db4437;
+    --success-color: #43a047;
+    --warning-color: #ffa600;
+    --ha-card-border-radius: 12px;
+    --ha-card-border-color: #e0e0e0;
+    color-scheme: light;
+  }
+  :root.dark {
+    --primary-background-color: #111111;
+    --secondary-background-color: #282828;
+    --card-background-color: #1c1c1c;
+    --ha-card-background: #1c1c1c;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --divider-color: rgba(225, 225, 225, 0.12);
+    --error-color: #ef5350;
+    --ha-card-border-color: rgba(225, 225, 225, 0.12);
+    color-scheme: dark;
+  }
+  html { background: var(--primary-background-color); }
+  body {
+    margin: 0; color: var(--primary-text-color);
+    font-family: Roboto, "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 14px;
+  }
+  .bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    padding: 10px 20px; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color);
+  }
+  .bar strong { font-size: 15px; margin-right: 8px; }
+  .bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--secondary-text-color); font-size: 13px; }
+  .bar select, .bar button {
+    font: inherit; font-size: 13px; color: var(--primary-text-color); background: transparent;
+    border: 1px solid var(--divider-color); border-radius: 6px; padding: 4px 8px;
+  }
+  .bar button { cursor: pointer; }
+  .stats { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--secondary-text-color); font-size: 13px; }
+  .stats b { color: var(--primary-text-color); }
+  main { padding: 20px; display: grid; gap: 28px; max-width: 1500px; margin: 0 auto; }
+  h2 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.05em; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 1000px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .phone { width: 390px; max-width: 100%; }
+  pre {
+    margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--card-background-color);
+    border: 1px solid var(--divider-color); white-space: pre-wrap; font-size: 12px; color: var(--secondary-text-color);
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>Data card harness</strong>
+  <label>Theme
+    <select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select>
+  </label>
+  <label>Locale
+    <select id="locale">
+      <option value="en-IE">en-IE</option><option value="en-US">en-US</option>
+      <option value="de-DE">de-DE</option><option value="fr-FR">fr-FR</option>
+    </select>
+  </label>
+  <label>Backend
+    <select id="mode">
+      <option value="normal">Normal</option>
+      <option value="empty">Empty tables</option>
+      <option value="unloaded">Integration not loaded (unknown_command)</option>
+      <option value="error">Failing (database is locked)</option>
+    </select>
+  </label>
+  <label>Latency
+    <select id="latency">
+      <option value="0">0 ms</option><option value="400" selected>400 ms</option>
+      <option value="1500">1.5 s</option><option value="5000">5 s</option>
+    </select>
+  </label>
+  <button id="remount" title="Recreate every card (column choices persist in localStorage)">Remount cards</button>
+  <button id="forget" title="Clear the column-group choices saved in localStorage">Forget column choices</button>
+  <span class="stats">callWS <b id="calls">0</b> · hass pushes <b id="pushes">0</b> · last: <span id="last">none</span></span>
+</div>
+
+<main>
+  <section><h2>Default usage card (daily) · <code>title: Data</code></h2><div id="slot-main"></div></section>
+  <div class="two">
+    <section><h2>Hourly · configured columns · show_controls: false · max_height: 340</h2><div id="slot-hourly"></div></section>
+    <section><h2>Meter reading log · dataset: readings</h2><div id="slot-readings"></div></section>
+  </div>
+  <section><h2>Phone width (390 px) · monthly</h2><div class="phone" id="slot-phone"></div></section>
+  <section><h2>Invalid configs (setConfig must throw a readable error)</h2><pre id="bad-config"></pre></section>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- ha-card stub
+// Home Assistant's ha-card, reduced to what affects layout and theming.
+if (!customElements.get("ha-card")) {
+  customElements.define("ha-card", class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" }).innerHTML = `<style>
+        :host { display: block; position: relative; box-sizing: border-box;
+          background: var(--ha-card-background, var(--card-background-color, #fff));
+          color: var(--primary-text-color); border-radius: var(--ha-card-border-radius, 12px);
+          border: 1px solid var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+          box-shadow: var(--ha-card-box-shadow, none); transition: background 0.3s, color 0.3s; }
+      </style><slot></slot>`;
+    }
+  });
+}
+
+// --------------------------------------------------------------- fake backend
+const DB_START = "2024-03-15";                     // first local day with data
+const DAY_RATE = 0.3527, NIGHT_RATE = 0.1865;      // €/kWh incl. VAT
+const FIXED_PER_HOUR = (252.0 + 23.27) / 8760;     // standing + PSO, €/hour
+const NOTE = "The newest row is still in progress: it includes live readings from the clamps that become a stored hour when the hour completes.";
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const PROFILE = [0.32, 0.28, 0.26, 0.25, 0.25, 0.28, 0.42, 0.78, 0.86, 0.6, 0.5, 0.48,
+                 0.55, 0.5, 0.45, 0.5, 0.72, 1.25, 1.45, 1.3, 1.1, 0.9, 0.66, 0.45];
+
+function rnd(s) {                                  // deterministic [0, 1) from a string
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+const r = (x, d) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d);
+const pad = (n) => String(n).padStart(2, "0");
+const isoDate = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+function lastSundayUtc(y, month) {
+  const d = new Date(Date.UTC(y, month + 1, 0));
+  return Date.UTC(y, month, d.getUTCDate() - d.getUTCDay(), 1);
+}
+const dublinOffsetH = (ms) => {                    // IST (UTC+1) between EU DST changes
+  const y = new Date(ms).getUTCFullYear();
+  return ms >= lastSundayUtc(y, 2) && ms < lastSundayUtc(y, 9) ? 1 : 0;
+};
+function local(ms) {
+  const l = new Date(ms + dublinOffsetH(ms) * 3600e3);
+  return { date: isoDate(l), hour: l.getUTCHours(), dow: l.getUTCDay(), month: l.getUTCMonth(), day: l.getUTCDate(), year: l.getUTCFullYear() };
+}
+const addDaysIso = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return isoDate(d); };
+const todayLocal = () => local(Date.now()).date;
+function localMidnightUtc(iso) {
+  const base = Date.parse(`${iso}T00:00:00Z`);
+  return base - dublinOffsetH(base - 3600e3) * 3600e3;
+}
+
+function makeHour(ms, frac = 1) {
+  const L = local(ms);
+  const k = String(ms);
+  const doy = (Date.parse(`${L.date}T00:00:00Z`) - Date.UTC(L.year, 0, 1)) / 86400e3;
+  const season = 1 + 0.38 * Math.cos((2 * Math.PI * (doy - 20)) / 365.25);
+  const weekend = L.dow === 0 || L.dow === 6 ? 1.15 : 1;
+  const ev = rnd(`${L.date}ev`) < 0.28 && L.hour >= 2 && L.hour < 6 ? 6.6 * (0.85 + 0.15 * rnd(`${k}ev`)) : 0;
+  const base = PROFILE[L.hour] * season * weekend * (0.75 + 0.5 * rnd(`${k}h`));
+  const house = (base + ev) * frac;
+  const hall = base * (0.12 + 0.18 * rnd(`${L.date}hall`)) * frac;
+  const night = L.hour >= 23 || L.hour < 8;
+  const avgW = (base + ev) * 1000;
+  const pf = Math.min(0.99, 0.82 + 0.14 * rnd(`${k}pf`) + (ev ? 0.04 : 0));
+  const vavg = 234 + 4 * Math.sin((L.hour / 24) * 2 * Math.PI) + 3 * (rnd(`${k}v`) - 0.5);
+  const peakW = avgW * (1.5 + 1.6 * rnd(`${k}pk`)) + (ev ? 300 : 0);
+  const esbReady = L.date <= addDaysIso(todayLocal(), -2) && rnd(`${L.date}esbgap`) > 0.04;
+  return {
+    ms, date: L.date, hour: L.hour, band: night ? "night" : "day", rate: night ? NIGHT_RATE : DAY_RATE,
+    house, hall, fixed: FIXED_PER_HOUR * frac, partial: frac < 1,
+    avgW, peakW, minW: 140 + 90 * rnd(`${k}mn`), hallAvgW: (hall / Math.max(frac, 0.01)) * 1000,
+    pf, hallPf: 0.6 + 0.3 * rnd(`${k}hpf`),
+    vmin: vavg - 2 - 5 * rnd(`${k}v1`), vavg, vmax: vavg + 2 + 4 * rnd(`${k}v2`),
+    curMax: (peakW / (vavg * pf)), hallCurMax: (hall * 1000 * 2.2) / (vavg * 0.8),
+    hz: 50 + 0.08 * (rnd(`${k}hz`) - 0.5),
+    hallOver: rnd(`${k}ho`) < 0.004 ? 1 : 0,
+    esb: esbReady && frac === 1 ? house / (1.012 + 0.03 * (rnd(`${k}esb`) - 0.5)) : null,
+  };
+}
+
+const HOURS = [];                                  // complete hours, oldest first
+let regDay = 41234.0, regNight = 18765.0;
+function ensureHours() {
+  const current = Math.floor(Date.now() / 3600e3) * 3600e3;
+  let ms = HOURS.length ? HOURS[HOURS.length - 1].ms + 3600e3 : localMidnightUtc(DB_START);
+  for (; ms < current; ms += 3600e3) {
+    const h = makeHour(ms);
+    if (h.band === "day") regDay += h.house; else regNight += h.house;
+    h.regDay = regDay; h.regNight = regNight;
+    HOURS.push(h);
+  }
+  return current;
+}
+
+function columns(period) {
+  const C = (key, label, unit, decimals, group) => ({ key, label, unit, decimals, group });
+  const hr = period === "hour";
+  const kd = hr ? 3 : 2, cd = hr ? 3 : 2;
+  const cols = [C("label", { hour: "Hour", day: "Day", month: "Month", year: "Year" }[period], null, null, "When")];
+  if (hr) cols.push(C("band", "Band", null, null, "When"));
+  cols.push(C("house_kwh", "House", "kWh", kd, "Energy"), C("day_kwh", "Day units", "kWh", kd, "Energy"),
+    C("night_kwh", "Night units", "kWh", kd, "Energy"), C("hall_kwh", "Hall", "kWh", kd, "Energy"),
+    C("rest_kwh", "Rest of house", "kWh", kd, "Energy"));
+  if (!hr) cols.push(C("night_share_pct", "Night share", "%", 1, "Energy"), C("hall_share_pct", "Hall share", "%", 1, "Energy"));
+  cols.push(C("energy_cost", "Units cost", "€", cd, "Cost"), C("fixed_cost", "Standing + PSO", "€", cd, "Cost"),
+    C("total_cost", "Total cost", "€", cd, "Cost"), C("hall_cost", "Hall cost", "€", cd, "Cost"), C("rest_cost", "Rest cost", "€", cd, "Cost"));
+  if (hr) cols.push(C("unit_rate", "Unit rate", "€/kWh", 4, "Cost"));
+  else cols.push(C("day_cost", "Day units cost", "€", 2, "Cost"), C("night_cost", "Night units cost", "€", 2, "Cost"),
+    C("effective_rate", "Avg unit price", "€/kWh", 4, "Cost"));
+  cols.push(C("avg_w", "House avg", "W", 0, "Power"), C("peak_w", "House peak", "W", 0, "Power"),
+    C("min_w", "House min", "W", 0, "Power"), C("hall_avg_w", "Hall avg", "W", 0, "Power"),
+    C("house_pf", "House PF", null, 3, "Quality"), C("hall_pf", "Hall PF", null, 3, "Quality"),
+    C("voltage_min", "Voltage min", "V", 1, "Quality"), C("voltage_avg", "Voltage avg", "V", 1, "Quality"),
+    C("voltage_max", "Voltage max", "V", 1, "Quality"));
+  if (hr) cols.push(C("house_current_max", "House current max", "A", 2, "Quality"),
+    C("hall_current_max", "Hall current max", "A", 2, "Quality"), C("frequency", "Frequency", "Hz", 2, "Quality"));
+  cols.push(C("register_day", "Day register (est.)", "kWh", 1, "Meter"), C("register_night", "Night register (est.)", "kWh", 1, "Meter"),
+    C("esb_kwh", "ESB metered", "kWh", kd, "ESB"), C("esb_diff_kwh", "Shelly − ESB", "kWh", kd, "ESB"),
+    C("esb_diff_pct", "Shelly − ESB", "%", 1, "ESB"), C("hours", "Hours of data", null, 0, "Data"),
+    C("hall_over_house_hours", "Hall > house", "h", 0, "Data"));
+  return cols;
+}
+
+function summary(hs) {
+  const sum = (f) => hs.reduce((a, h) => a + f(h), 0);
+  const avg = (f) => (hs.length ? sum(f) / hs.length : null);
+  const house = sum((h) => h.house), day = sum((h) => (h.band === "day" ? h.house : 0)), night = house - day;
+  const hall = sum((h) => h.hall), energy = sum((h) => h.house * h.rate), fixed = sum((h) => h.fixed);
+  const dayCost = sum((h) => (h.band === "day" ? h.house * h.rate : 0)), hallCost = sum((h) => h.hall * h.rate);
+  // ESB compared only over local days that are complete on both sides.
+  const byDay = new Map();
+  for (const h of hs) { if (!byDay.has(h.date)) byDay.set(h.date, []); byDay.get(h.date).push(h); }
+  let esbAll = 0, esbSeen = false, esbCmp = 0, shellyCmp = 0;
+  for (const list of byDay.values()) {
+    const withEsb = list.filter((h) => h.esb !== null);
+    if (withEsb.length) { esbSeen = true; esbAll += withEsb.reduce((a, h) => a + h.esb, 0); }
+    if (withEsb.length === list.length && list.length >= 23) {
+      esbCmp += withEsb.reduce((a, h) => a + h.esb, 0); shellyCmp += list.reduce((a, h) => a + h.house, 0);
+    }
+  }
+  return {
+    house_kwh: r(house, 3), day_kwh: r(day, 3), night_kwh: r(night, 3), hall_kwh: r(hall, 3), rest_kwh: r(house - hall, 3),
+    night_share_pct: house ? r((night / house) * 100, 1) : null, hall_share_pct: house ? r((hall / house) * 100, 1) : null,
+    energy_cost: r(energy, 4), fixed_cost: r(fixed, 4), total_cost: r(energy + fixed, 4),
+    hall_cost: r(hallCost, 4), rest_cost: r(energy + fixed - hallCost, 4),
+    day_cost: r(dayCost, 4), night_cost: r(energy - dayCost, 4), effective_rate: house ? r(energy / house, 4) : null,
+    peak_w: r(Math.max(...hs.map((h) => h.peakW)), 0), house_pf: r(avg((h) => h.pf), 3), hall_pf: r(avg((h) => h.hallPf), 3),
+    voltage_min: r(Math.min(...hs.map((h) => h.vmin)), 1), voltage_max: r(Math.max(...hs.map((h) => h.vmax)), 1),
+    hours: hs.length, hall_over_house_hours: sum((h) => h.hallOver),
+    esb_kwh: esbSeen ? r(esbAll, 3) : null,
+    esb_diff_kwh: esbCmp ? r(shellyCmp - esbCmp, 3) : null,
+    esb_diff_pct: esbCmp ? r(((shellyCmp - esbCmp) / esbCmp) * 100, 2) : null,
+    _avgW: hs.length ? r((house * 1000) / hs.length, 0) : null,
+  };
+}
+
+function hourLabel(ms) {
+  const L = local(ms);
+  return `${DOW[L.dow]} ${L.day} ${MON[L.month]} ${L.year} ${pad(L.hour)}:00`;
+}
+function dayLabel(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+function table(msg) {
+  const current = ensureHours();
+  const minute = new Date().getUTCMinutes();
+  const live = makeHour(current, Math.max(0.05, minute / 60));
+  const all = HOURS.concat([live]);
+  const today = todayLocal();
+  const { period } = msg;
+  const start = msg.start ?? null, end = msg.end ?? null;
+  const members = all.filter((h) => (!start || h.date >= start) && (!end || h.date <= end));
+  const keyOf = { hour: (h) => String(h.ms), day: (h) => h.date, month: (h) => h.date.slice(0, 7), year: (h) => h.date.slice(0, 4) }[period];
+  const groups = new Map();
+  for (const h of members) { const k = keyOf(h); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(h); }
+
+  const rows = [];
+  for (const [k, hs] of groups) {
+    const s = summary(hs);
+    const last = hs[hs.length - 1];
+    const row = { ...s };
+    delete row._avgW;
+    row.register_day = last.partial ? null : r(last.regDay, 1);
+    row.register_night = last.partial ? null : r(last.regNight, 1);
+    if (period === "hour") {
+      const h = hs[0];
+      Object.assign(row, {
+        key: new Date(h.ms).toISOString().replace(".000Z", "+00:00"), label: hourLabel(h.ms), partial: h.partial,
+        band: h.band === "night" ? "Night" : "Day", unit_rate: h.rate, avg_w: r(h.avgW, 0), min_w: r(h.minW, 0),
+        hall_avg_w: r(h.hallAvgW, 0), house_pf: r(h.pf, 3), hall_pf: r(h.hallPf, 3), voltage_avg: r(h.vavg, 1),
+        house_current_max: r(h.curMax, 2), hall_current_max: r(h.hallCurMax, 2), frequency: r(h.hz, 2),
+        esb_kwh: r(h.esb, 3),
+        esb_diff_kwh: h.esb !== null ? r(h.house - h.esb, 3) : null,
+        esb_diff_pct: h.esb ? r(((h.house - h.esb) / h.esb) * 100, 1) : null,
+      });
+    } else {
+      const inProgress = (period === "day" && k === today) || (period === "month" && k === today.slice(0, 7)) || (period === "year" && k === today.slice(0, 4));
+      Object.assign(row, {
+        key: k,
+        label: period === "day" ? dayLabel(k) : period === "month" ? `${MONTH[+k.slice(5) - 1]} ${k.slice(0, 4)}` : k,
+        partial: inProgress || hs.some((h) => h.partial),
+        avg_w: s._avgW, min_w: r(Math.min(...hs.map((h) => h.minW)), 0),
+        hall_avg_w: r(hs.reduce((a, h) => a + h.hallAvgW, 0) / hs.length, 0),
+        voltage_avg: r(hs.reduce((a, h) => a + h.vavg, 0) / hs.length, 1),
+      });
+    }
+    rows.push(row);
+  }
+  rows.reverse();                                   // newest first
+
+  let totals = null;
+  if (rows.length) {
+    const s = summary(members);
+    totals = { label: "Total" };
+    for (const key of ["house_kwh", "day_kwh", "night_kwh", "hall_kwh", "rest_kwh", "night_share_pct", "hall_share_pct",
+      "energy_cost", "fixed_cost", "total_cost", "hall_cost", "rest_cost", "day_cost", "night_cost", "effective_rate",
+      "peak_w", "house_pf", "hall_pf", "voltage_min", "voltage_max", "hours", "hall_over_house_hours",
+      "esb_kwh", "esb_diff_kwh", "esb_diff_pct"]) totals[key] = s[key];
+  }
+  return {
+    period, start, end, columns: columns(period), rows, totals,
+    note: rows.length && rows[0].partial ? NOTE : null,
+  };
+}
+
+function readings() {
+  const cols = [
+    ["created", "Logged", null, null, "When"], ["read_at", "Reading time", null, null, "When"],
+    ["day_kwh", "Day", "kWh", 0, "Reading"], ["night_kwh", "Night", "kWh", 0, "Reading"],
+    ["origin", "From", null, null, "Reading"], ["mode", "Mode", null, null, "Result"],
+    ["status", "Status", null, null, "Result"], ["message", "Message", null, null, "Result"],
+  ].map(([key, label, unit, decimals, group]) => ({ key, label, unit, decimals, group }));
+  const outcomes = [
+    ["prepared", "live", "Prepared; waiting for you to confirm on the SSE page."],
+    ["submitted", "live", "Accepted by SSE Airtricity, reference 7731-4410."],
+    ["blocked", "live", "Blocked: SSE accepts one reading per 24 hours and one was sent 3 hours ago."],
+    ["dry_run", "dry_run", "Dry run: nothing was sent. The form would have carried these values."],
+    ["failed", "live", 'SSE said "Service temporarily unavailable, please try later" (HTTP 503). Nothing was recorded.'],
+    ["submitted", "live", "Accepted by SSE Airtricity, reference 7702-1186."],
+  ];
+  const now = Date.now();
+  const fmt = (ms) => { const L = local(ms); const m = new Date(ms + dublinOffsetH(ms) * 3600e3).getUTCMinutes(); return `${DOW[L.dow]} ${L.day} ${MON[L.month]} ${L.year} ${pad(L.hour)}:${pad(m)}`; };
+  const rows = [];
+  let day = 48231, nightR = 21877;
+  for (let i = 0; i < 12; i++) {
+    const created = now - (i * 4.3 + 0.2) * 86400e3;
+    const [status, mode, message] = outcomes[i % outcomes.length];
+    const read = created - (20 + 40 * rnd(`rd${i}`)) * 60e3;
+    rows.push({ label: fmt(created), created: fmt(created), read_at: fmt(read), day_kwh: day, night_kwh: nightR,
+      origin: i % 3 === 0 ? "Scheduled" : "Button", mode, status, message });
+    day -= Math.round(38 + 12 * rnd(`d${i}`)); nightR -= Math.round(14 + 8 * rnd(`n${i}`));
+  }
+  return { columns: cols, rows, note: "Readings are only ever sent when you press the button. SSE accepts one per 24 hours." };
+}
+
+// ------------------------------------------------------------ fake hass + ui
+const state = { dark: false, locale: "en-IE", mode: "normal", latency: 400 };
+const stats = { calls: 0, pushes: 0, log: [] };
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+async function callWS(msg) {
+  stats.calls += 1;
+  stats.log.push(JSON.parse(JSON.stringify(msg)));
+  document.getElementById("calls").textContent = stats.calls;
+  document.getElementById("last").textContent = JSON.stringify(msg).replace(/"type":"electricity_analyzer\//, '"');
+  await sleep(state.latency * (0.75 + 0.5 * Math.random()));
+  if (state.mode === "unloaded") throw { code: "unknown_command", message: "Unknown command." };
+  if (state.mode === "error") throw { code: "home_assistant_error", message: "Error reading the Electricity Analyzer database: database is locked" };
+  if (msg.type === "electricity_analyzer/table") {
+    const keys = Object.keys(msg).filter((k) => !["type", "id", "period", "start", "end"].includes(k));
+    if (keys.length) throw { code: "invalid_format", message: `extra keys not allowed: ${keys.join(", ")}` };
+    if (!["hour", "day", "month", "year"].includes(msg.period)) throw { code: "invalid_format", message: `bad period ${msg.period}` };
+    if (("start" in msg) !== ("end" in msg)) throw { code: "invalid_format", message: "start and end must be given together (or both omitted)" };
+    if ("start" in msg && (!DAY_RE.test(msg.start) || !DAY_RE.test(msg.end))) throw { code: "invalid_format", message: `dates must be YYYY-MM-DD (got ${msg.start} / ${msg.end})` };
+    if ("start" in msg && msg.start > msg.end) throw { code: "invalid_format", message: "start is after end" };
+    const out = table(msg);
+    if (state.mode === "empty") { out.rows = []; out.totals = null; out.note = null; }
+    return out;
+  }
+  if (msg.type === "electricity_analyzer/readings") {
+    const out = readings();
+    if (state.mode === "empty") out.rows = [];
+    return out;
+  }
+  throw { code: "unknown_command", message: "Unknown command." };
+}
+
+let locale = null;
+function makeHass() {
+  if (!locale || locale.language !== state.locale) {
+    locale = { language: state.locale, number_format: "language", time_format: "language", time_zone: "server" };
+  }
+  return {
+    language: state.locale.split("-")[0], locale, callWS,
+    themes: { darkMode: state.dark, theme: "default", default_theme: "default", themes: {} },
+    config: { time_zone: "Europe/Dublin", unit_system: { length: "km" } },
+    user: { name: "Harness", is_admin: true }, states: {}, connected: true,
+  };
+}
+let hass = makeHass();
+</script>
+
+<script src="../custom_components/electricity_analyzer/frontend/electricity-analyzer-data-card.js"></script>
+
+<script>
+"use strict";
+const TAG = "electricity-analyzer-data-card";
+const CONFIGS = {
+  main: { type: `custom:${TAG}`, title: "Data" },
+  hourly: {
+    type: `custom:${TAG}`, title: "Today, hour by hour", period: "hour", range_days: 1,
+    columns: ["label", "house_kwh", "total_cost", "avg_w", "house_pf", "voltage_avg", "esb_diff_kwh"],
+    show_controls: false, max_height: 340,
+  },
+  readings: { type: `custom:${TAG}`, dataset: "readings" },
+  phone: { type: `custom:${TAG}`, title: "Monthly", period: "month" },
+};
+const cards = {};
+
+function mount(name) {
+  const slot = document.getElementById(`slot-${name}`);
+  slot.textContent = "";
+  const el = document.createElement(TAG);          // same order as Lovelace: config, hass, attach
+  el.setConfig(CONFIGS[name]);
+  el.hass = hass;
+  slot.appendChild(el);
+  cards[name] = el;
+  return el;
+}
+function mountAll() { for (const name of Object.keys(CONFIGS)) mount(name); }
+function push() {
+  hass = makeHass();
+  stats.pushes += 1;
+  document.getElementById("pushes").textContent = stats.pushes;
+  for (const el of Object.values(cards)) el.hass = hass;
+}
+
+const harness = {
+  state, stats, cards, CONFIGS, mount, mountAll, push,
+  setTheme(dark) {
+    state.dark = !!dark;
+    document.documentElement.classList.toggle("dark", state.dark);
+    document.getElementById("theme").value = state.dark ? "dark" : "light";
+    push();
+  },
+  setLocale(l) { state.locale = l; document.getElementById("locale").value = l; push(); },
+  setMode(m) { state.mode = m; document.getElementById("mode").value = m; },
+  setLatency(ms) { state.latency = ms; },
+  forget() { for (const k of Object.keys(localStorage)) if (k.startsWith(`${TAG}:`)) localStorage.removeItem(k); },
+};
+window.harness = harness;
+
+document.getElementById("theme").addEventListener("change", (e) => harness.setTheme(e.target.value === "dark"));
+document.getElementById("locale").addEventListener("change", (e) => harness.setLocale(e.target.value));
+document.getElementById("mode").addEventListener("change", (e) => harness.setMode(e.target.value));
+document.getElementById("latency").addEventListener("change", (e) => harness.setLatency(Number(e.target.value)));
+document.getElementById("remount").addEventListener("click", mountAll);
+document.getElementById("forget").addEventListener("click", () => { harness.forget(); mountAll(); });
+
+// Validation messages for configs Lovelace would reject.
+const bad = [{ dataset: "bogus" }, { period: "week" }, { columns: "house_kwh" }, { range_days: 0 }, { max_height: "tall" }];
+document.getElementById("bad-config").textContent = bad.map((cfg) => {
+  try { document.createElement(TAG).setConfig(cfg); return `${JSON.stringify(cfg)}  ->  accepted (unexpected)`; }
+  catch (e) { return `${JSON.stringify(cfg)}  ->  ${e.message}`; }
+}).join("\n");
+
+const meta = customElements.get(TAG);
+console.assert(meta, "card did not register");
+console.assert((window.customCards || []).some((c) => c.type === TAG), "card missing from window.customCards");
+mountAll();
+setInterval(push, 1000);                           // Home Assistant pushes hass constantly
+</script>
+</body>
+</html>

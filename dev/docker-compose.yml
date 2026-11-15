@@ -1,0 +1,77 @@
+# Throwaway Home Assistant sandbox for Electricity Analyzer. Nothing here is real:
+#
+#   homeassistant  HA 2026.9 with the integration mounted read-only, plus the
+#                  `shelly_sim` dev component standing in for the Shelly EM Gen4
+#                  (two clamps, a year of backfilled history, live updates)
+#   sse-mock       a local fake of the SSE Airtricity portal (dev/sse_mock)
+#   esb-mock       a local fake of ESB Networks' portal and its sign-in (dev/esb_mock),
+#                  publishing what the simulated clamp measured, as a meter would
+#
+# The mocks answer under the portals' real names, but only inside this Docker network
+# (network aliases), over HTTPS with a throwaway CA that only the sandbox trusts
+# (dev/devcerts.py). So the integration runs unmodified, exactly as installed, and the
+# real SSE and ESB are never contacted. The real installation uses the real Shelly
+# integration and the real portals; none of this is shipped.
+#
+#   .venv-ha/bin/python dev/sandbox.py manual    # start; you add the integration
+#   .venv-ha/bin/python dev/sandbox.py up        # start, onboard, set up, verify
+#   .venv-ha/bin/python dev/sandbox.py down      # stop and delete everything
+#
+# Open http://localhost:8126 (user: sandbox, password in dev/sandbox.py).
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.9
+    container_name: ea-sandbox
+    restart: "no"
+    ports:
+      - "8126:8123"
+    volumes:
+      - ./sandbox-config:/config
+      - ../custom_components/electricity_analyzer:/config/custom_components/electricity_analyzer:ro
+      - ./sim/custom_components/shelly_sim:/config/custom_components/shelly_sim:ro
+      - ./certs:/devcerts:ro
+    environment:
+      TZ: Europe/Dublin
+      # The public CAs plus the sandbox CA, so the mocks' HTTPS is trusted here only.
+      REQUESTS_CA_BUNDLE: /devcerts/bundle.pem
+    depends_on:
+      - sse-mock
+      - esb-mock
+
+  sse-mock:
+    image: ghcr.io/home-assistant/home-assistant:2026.9
+    container_name: ea-sse-mock
+    restart: "no"
+    entrypoint: ["python3", "/mock/server.py", "--port", "8090", "--tls-port", "443",
+                 "--cert", "/certs/mock.pem", "--key", "/certs/mock-key.pem"]
+    ports:
+      - "8090:8090"   # plain HTTP, for looking at /__mock/state from the laptop
+    volumes:
+      - ./sse_mock:/mock:ro
+      - ./certs:/certs:ro
+    networks:
+      default:
+        aliases:
+          - account.sseairtricity.com
+
+  esb-mock:
+    image: ghcr.io/home-assistant/home-assistant:2026.9
+    container_name: ea-esb-mock
+    restart: "no"
+    entrypoint: ["python3", "/mock/server.py", "--port", "8091", "--tls-port", "443",
+                 "--cert", "/certs/mock.pem", "--key", "/certs/mock-key.pem"]
+    environment:
+      TZ: Europe/Dublin
+      SHELLY_SIM_MODEL: /sim/model.py
+    ports:
+      - "8091:8091"   # plain HTTP, for looking at /__mock/state from the laptop
+    volumes:
+      - ./esb_mock:/mock:ro
+      - ./sim/custom_components/shelly_sim:/sim:ro
+      - ./certs:/certs:ro
+    networks:
+      default:
+        aliases:
+          - myaccount.esbnetworks.ie
+          - login.esbnetworks.ie

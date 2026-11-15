@@ -1,0 +1,33 @@
+# macOS metadata
+.DS_Store
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Preserved metadata from nested repositories
+.git.nested-backup/
+
+# Local secrets
+.credentials*
+
+# Generated sandbox state and throwaway TLS certs
+dev/sandbox-config/
+dev/certs/
+
+

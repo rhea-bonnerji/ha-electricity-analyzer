@@ -1,0 +1,482 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Electricity Analyzer is already set up.",
+      "single_instance_allowed": "Electricity Analyzer is already set up."
+    },
+    "error": {
+      "same_entity": "The hall clamp must be a different sensor from the full-house clamp.",
+      "need_power": "The full-house clamp needs a power sensor. Pick the Shelly's Power sensor for that channel.",
+      "rate_range": "Enter the unit rate in cent per kWh including VAT, e.g. 32.38.",
+      "standing_range": "Enter the standing charge in euro per YEAR including VAT, e.g. 359.71.",
+      "sse_credentials": "Enter your SSE Airtricity email and password (or turn SSE off).",
+      "sse_auth": "SSE Airtricity rejected that email or password.",
+      "reading_both": "Enter both the day and the night reading, or neither.",
+      "esb_credentials": "Enter your ESB Networks email, password and MPRN.",
+      "esb_auth": "ESB Networks rejected that email or password.",
+      "reading_time": "Say when the meter was read.",
+      "reading_future": "A meter reading cannot be in the future.",
+      "esb_captcha": "ESB Networks asked for a CAPTCHA, which this integration never works around. Sign in once at myaccount.esbnetworks.ie in a browser, then try again here (or choose Off for now and add the account later under Configure).",
+      "esb_unreachable": "Couldn't sign in to ESB Networks: the site did not answer as expected. Try again later, or choose Off for now and add the account later under Configure."
+    },
+    "step": {
+      "user": {
+        "title": "Shelly energy monitor",
+        "description": "Pick the two clamps' energy sensors. The **full house** clamp (120 A) is the total and is the only one that goes on Home Assistant's Energy dashboard. The **hall** clamp (50 A) is a circuit inside that total, tracked separately; the two are never added together.",
+        "data": {
+          "house_energy": "Full house energy (120 A clamp)",
+          "hall_energy": "Hall energy (50 A clamp)"
+        }
+      },
+      "channels": {
+        "title": "Clamp sensors",
+        "description": "Found automatically from each clamp's device. Change any that are wrong; leave out any you do not have. Every one of these is stored hourly and shown on the dashboard.",
+        "sections": {
+          "house": {
+            "name": "Full house (120 A)",
+            "data": {
+              "power": "Power",
+              "apparent_power": "Apparent power",
+              "power_factor": "Power factor",
+              "voltage": "Voltage",
+              "current": "Current",
+              "frequency": "Frequency",
+              "energy_returned": "Energy returned"
+            }
+          },
+          "hall": {
+            "name": "Hall (50 A)",
+            "data": {
+              "power": "Power",
+              "apparent_power": "Apparent power",
+              "power_factor": "Power factor",
+              "voltage": "Voltage",
+              "current": "Current",
+              "frequency": "Frequency",
+              "energy_returned": "Energy returned"
+            }
+          }
+        }
+      },
+      "tariff": {
+        "title": "Your electricity plan",
+        "description": "Every figure INCLUDING VAT, as printed on the price sheet. Pre-filled with SSE Airtricity 30% Day Night (in force from 6 October 2026, urban Nightsaver; PSO levy €19.10 a year). Standing charge and PSO levy are per YEAR; each day is charged one 365th.\n\n**Night hours: keep 23 and 8. Irish summer time (DST) is taken into account automatically:** night is 23:00–08:00 in winter and 00:00–09:00 in summer, switching by itself when the clocks change. Choose *Smart tariff* only if your plan's night is 23:00–08:00 on the wall clock all year.",
+        "data": {
+          "supplier": "Supplier",
+          "plan": "Plan",
+          "day_rate": "Day rate (c/kWh incl. VAT)",
+          "night_rate": "Night rate (c/kWh incl. VAT)",
+          "standing_charge": "Standing charge (€/year incl. VAT)",
+          "pso_levy": "PSO levy (€/year incl. VAT)",
+          "night_start": "Night starts (keep 23; Irish DST is taken into account)",
+          "night_end": "Night ends (keep 8; Irish DST is taken into account)",
+          "night_clock": "Night hours",
+          "valid_from": "These rates apply from",
+          "bill_anchor": "A date a billing period started (optional)",
+          "bill_months": "Billing period"
+        }
+      },
+      "sse": {
+        "title": "SSE Airtricity meter readings",
+        "description": "For sending your meter reading to SSE. A reading is ONLY sent when you press the **Submit meter reading** button; nothing is ever sent automatically, and SSE accepts one reading per 24 hours.\n\n**Dry run** builds exactly what would be sent and shows it, without contacting SSE. **Live** signs in once now (read only) to check the details.",
+        "data": {
+          "sse_mode": "Mode",
+          "sse_username": "SSE Airtricity email",
+          "sse_password": "SSE Airtricity password",
+          "sse_account": "Account number (optional)",
+          "mprn": "MPRN (optional, 11 digits)",
+          "sse_sync": "Once a day, read SSE's latest meter reading (read only), so readings you submit on SSE's website or app also improve the estimates"
+        }
+      },
+      "esb": {
+        "title": "ESB Networks",
+        "description": "ESB Networks publishes the meter's own half-hourly data two to three days late. It is compared with the clamp, used to calibrate the meter-reading estimate, and gives up to two years of history for the seasonal forecast. Choosing your account signs in once now to check the details. ESB rate-limits sign-ins: at most two automatic fetches a day (once is the default), at most two sign-ins in any 24 hours, and a CAPTCHA is never worked around.",
+        "data": {
+          "esb_mode": "ESB data",
+          "esb_username": "ESB Networks email",
+          "esb_password": "ESB Networks password",
+          "mprn": "MPRN (11 digits)",
+          "esb_fetches_per_day": "Automatic fetches (ESB publishes once a day, 2-3 days late)"
+        }
+      },
+      "reading": {
+        "title": "Current meter reading",
+        "description": "Read the day and night registers off the meter and say when. From then on the integration adds what the full-house clamp measures, in the right register, to give the meter reading as of now. {sse}",
+        "data": {
+          "reading_day": "Day register",
+          "reading_night": "Night register",
+          "reading_at": "Read at"
+        }
+      },
+      "weather": {
+        "title": "Location and weather",
+        "description": "Weather drives the forecasts (how cold it is, sun, wind, rain). The history and a 16-day forecast come from Open-Meteo (free, no key) for the spot you pin here. {origin} **Drag the pin onto your home.**\n\n**AccuWeather:** add Home Assistant's own AccuWeather integration (Settings → Devices & services → Add integration → AccuWeather; it asks for an AccuWeather API key) and pick its weather entity below, now or later under Configure → Location and weather. Its forecast is blended with Open-Meteo's, each weighted by how well it has forecast your area.",
+        "data": {
+          "location": "Your home",
+          "weather_entity": "AccuWeather (or any) forecast to blend in (optional)"
+        }
+      },
+      "dashboard": {
+        "title": "Dashboard",
+        "description": "A dashboard is added to the sidebar and kept up to date automatically.\n\n**Energy dashboard:** the meter's energy (ESB's figures, the clamp until ESB has them, ESB's history before the clamp) and its energy cost at your tariff periods, both revised whenever prices change or ESB publishes. Standing charge and PSO are fixed charges and stay on the Electricity dashboard. *Replace* makes this the only grid connection and removes any other one, keeping a copy; solar, battery, gas, water and individual devices are never touched.",
+        "data": {
+          "dashboard_title": "Sidebar title",
+          "dashboard_path": "Address",
+          "energy_dashboard_mode": "Energy dashboard"
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "need_house": "The full-house energy sensor is required.",
+      "rate_range": "Enter the unit rate in cent per kWh including VAT, e.g. 32.38.",
+      "standing_range": "Enter the standing charge in euro per YEAR including VAT.",
+      "sse_credentials": "Enter your SSE Airtricity email and password (or turn SSE off).",
+      "sse_auth": "SSE Airtricity rejected that email or password.",
+      "reading_both": "Enter both the day and the night reading, or neither.",
+      "esb_credentials": "Enter your ESB Networks email, password and MPRN.",
+      "reading_time": "Say when the meter was read.",
+      "reading_future": "A meter reading cannot be in the future.",
+      "esb_auth": "ESB Networks rejected that email or password.",
+      "esb_captcha": "ESB Networks asked for a CAPTCHA, which this integration never works around. Sign in once at myaccount.esbnetworks.ie in a browser, then try again here (or choose Off for now and add the account later under Configure).",
+      "esb_unreachable": "Couldn't sign in to ESB Networks: the site did not answer as expected. Try again later, or choose Off for now and add the account later under Configure.",
+      "end_before_start": "The last day is before the first day.",
+      "end_gap": "There is no tariff after that last day to go back to. Leave the last day empty: the prices then apply until the next period.",
+      "last_period": "The only tariff period cannot be removed; change its prices instead.",
+      "no_period": "There is no tariff period starting on that day.",
+      "not_future": "Choose a day after today (for today, use \"From today onwards\")."
+    },
+    "step": {
+      "init": {
+        "title": "Electricity Analyzer",
+        "menu_options": {
+          "rates": "Prices: change them, set a period, or remove one",
+          "tariff": "Plan from setup (prices, night hours, names)",
+          "reading": "Meter reading",
+          "sse": "SSE Airtricity",
+          "esb": "ESB Networks",
+          "weather": "Location and weather",
+          "channels": "Clamp sensors",
+          "dashboard": "Dashboard"
+        }
+      },
+      "tariff": {
+        "title": "New prices",
+        "description": "Enter the prices and the date they start. Hours from that date are re-priced; earlier hours keep the price they had. All figures INCLUDING VAT.\n\n**Night hours: keep 23 and 8. Irish summer time (DST) is taken into account automatically:** night is 23:00–08:00 in winter and 00:00–09:00 in summer.",
+        "data": {
+          "supplier": "Supplier",
+          "plan": "Plan",
+          "day_rate": "Day rate (c/kWh incl. VAT)",
+          "night_rate": "Night rate (c/kWh incl. VAT)",
+          "standing_charge": "Standing charge (€/year incl. VAT)",
+          "pso_levy": "PSO levy (€/year incl. VAT)",
+          "night_start": "Night starts (keep 23; Irish DST is taken into account)",
+          "night_end": "Night ends (keep 8; Irish DST is taken into account)",
+          "night_clock": "Night hours",
+          "valid_from": "These prices apply from",
+          "bill_anchor": "A date a billing period started (optional)",
+          "bill_months": "Billing period"
+        }
+      },
+      "reading": {
+        "title": "Meter reading",
+        "description": "A new reading off the meter replaces the starting point of the running estimate. Older readings are kept. Now: {now}. {sse}",
+        "data": {
+          "reading_day": "Day register",
+          "reading_night": "Night register",
+          "reading_at": "Read at"
+        }
+      },
+      "sse": {
+        "title": "SSE Airtricity",
+        "description": "Readings are only ever sent when you press the button.",
+        "data": {
+          "sse_mode": "Mode",
+          "sse_username": "SSE Airtricity email",
+          "sse_password": "SSE Airtricity password",
+          "sse_account": "Account number (optional)",
+          "mprn": "MPRN (optional)",
+          "sse_sync": "Once a day, read SSE's latest meter reading (read only), so readings you submit on SSE's website or app also improve the estimates"
+        }
+      },
+      "esb": {
+        "title": "ESB Networks",
+        "data": {
+          "esb_mode": "ESB data",
+          "esb_username": "ESB Networks email",
+          "esb_password": "ESB Networks password",
+          "mprn": "MPRN (11 digits)",
+          "esb_fetches_per_day": "Automatic fetches (ESB publishes once a day, 2-3 days late)"
+        },
+        "description": "ESB Networks publishes the meter's own half-hourly data two to three days late. It is compared with the clamp, used to calibrate the meter-reading estimate, and gives up to two years of history for the seasonal forecast. Choosing your account signs in once now to check the details. ESB rate-limits sign-ins: at most two automatic fetches a day (once is the default), at most two sign-ins in any 24 hours, and a CAPTCHA is never worked around."
+      },
+      "weather": {
+        "title": "Location and weather",
+        "description": "Weather drives the forecasts (how cold it is, sun, wind, rain). The history and a 16-day forecast come from Open-Meteo (free, no key) for the spot you pin here. {origin} **Drag the pin onto your home.**\n\n**AccuWeather:** add Home Assistant's own AccuWeather integration (Settings → Devices & services → Add integration → AccuWeather; it asks for an AccuWeather API key) and pick its weather entity below, now or later under Configure → Location and weather. Its forecast is blended with Open-Meteo's, each weighted by how well it has forecast your area.",
+        "data": {
+          "location": "Your home",
+          "weather_entity": "AccuWeather (or any) forecast to blend in (optional)"
+        }
+      },
+      "channels": {
+        "title": "Clamp sensors",
+        "sections": {
+          "house": {
+            "name": "Full house (120 A)"
+          },
+          "hall": {
+            "name": "Hall (50 A)"
+          }
+        }
+      },
+      "dashboard": {
+        "title": "Dashboard",
+        "data": {
+          "dashboard_title": "Sidebar title",
+          "dashboard_path": "Address",
+          "energy_dashboard_mode": "Energy dashboard"
+        },
+        "description": "A dashboard is added to the sidebar and kept up to date automatically.\n\n**Energy dashboard:** the meter's energy (ESB's figures, the clamp until ESB has them, ESB's history before the clamp) and its energy cost at your tariff periods, both revised whenever prices change or ESB publishes. Standing charge and PSO are fixed charges and stay on the Electricity dashboard. *Replace* makes this the only grid connection and removes any other one, keeping a copy; solar, battery, gas, water and individual devices are never touched."
+      },
+      "rates_remove": {
+        "title": "Remove a tariff period",
+        "description": "{periods}\n\nThe period before it carries on in its place (or, for the first, those days have no prices). Every stored hour is re-priced at once.",
+        "data": {
+          "valid_from": "Period"
+        }
+      },
+      "rates": {
+        "title": "Prices",
+        "description": "{periods}\n\nAlways the same four prices, **including VAT**: day rate, night rate, standing charge and PSO levy. Whichever you choose, it is stored and every stored hour is re-priced at once.",
+        "menu_options": {
+          "rates_period": "For a period: from one day to another (e.g. your previous plan)",
+          "rates_now": "From today onwards: change the current prices",
+          "rates_future": "From a future date: today's prices carry on until then",
+          "rates_remove": "Remove a period"
+        }
+      },
+      "rates_period": {
+        "title": "Prices for a period",
+        "description": "{periods}\n\n{gap}\n\nThese prices apply from the first day to the last day inclusive; whatever applied after the last day carries on from the next day. A period starting on the same first day is replaced.",
+        "data": {
+          "valid_from": "First day",
+          "valid_to": "Last day",
+          "day_rate": "Day rate",
+          "night_rate": "Night rate",
+          "standing_charge": "Standing charge (per year)",
+          "pso_levy": "PSO levy (per year)"
+        }
+      },
+      "rates_now": {
+        "title": "New prices from today",
+        "description": "{periods}\n\nThese prices apply from today ({today}) onwards, until the next period if a later one is already set. Earlier days keep their prices.",
+        "data": {
+          "day_rate": "Day rate",
+          "night_rate": "Night rate",
+          "standing_charge": "Standing charge (per year)",
+          "pso_levy": "PSO levy (per year)"
+        }
+      },
+      "rates_future": {
+        "title": "New prices from a future date",
+        "description": "{periods}\n\nThese prices apply from the day you choose (after today, {today}); until then the current prices carry on. They run until the next period if a later one is already set.",
+        "data": {
+          "valid_from": "First day",
+          "day_rate": "Day rate",
+          "night_rate": "Night rate",
+          "standing_charge": "Standing charge (per year)",
+          "pso_levy": "PSO levy (per year)"
+        }
+      }
+    },
+    "abort": {
+      "not_loaded": "Electricity Analyzer is not running yet; try again in a moment."
+    }
+  },
+  "issues": {
+    "esb_captcha": {
+      "title": "ESB Networks is asking for a CAPTCHA",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Sign in to ESB Networks yourself",
+            "description": "ESB Networks showed a CAPTCHA ({reason}). This integration never solves or bypasses one. Sign in at https://myaccount.esbnetworks.ie in your browser, then copy the request's Cookie header from the browser's developer tools and paste it here. ESB data resumes immediately and the session is reused.",
+            "data": {
+              "cookie": "Cookie header"
+            }
+          }
+        },
+        "error": {
+          "no_cookies": "No cookies found in what was pasted."
+        }
+      }
+    },
+    "database_restored": {
+      "title": "The electricity database was repaired",
+      "description": "The database failed its integrity check at start-up: {detail}. History missing since that backup is re-read automatically from Home Assistant's recorder, ESB and the weather archive."
+    },
+    "clock_offset": {
+      "title": "Home Assistant's clock is off",
+      "description": "An NTP check against {server} found the clock {offset} s out. Day/night bands use the corrected time meanwhile, but please fix the system clock (NTP) on the host."
+    }
+  },
+  "services": {
+    "refresh_esb": {
+      "name": "Refresh ESB",
+      "description": "Fetch ESB Networks data now, ignoring the schedule. Use sparingly: the portal rate-limits."
+    },
+    "rebuild": {
+      "name": "Rebuild history",
+      "description": "Re-read every hour the recorder holds for the clamps, re-price it, and rewrite the long-term statistics. No network access.",
+      "fields": {
+        "dashboard": {
+          "name": "Also regenerate the dashboard",
+          "description": "Discards hand edits to the dashboard."
+        }
+      }
+    },
+    "set_meter_reading": {
+      "name": "Set meter reading",
+      "description": "Record a reading taken off the meter. The running estimate starts again from it.",
+      "fields": {
+        "day": {
+          "name": "Day register",
+          "description": "kWh shown on the day register."
+        },
+        "night": {
+          "name": "Night register",
+          "description": "kWh shown on the night register."
+        },
+        "taken_at": {
+          "name": "Read at",
+          "description": "When the meter was read. Defaults to now."
+        }
+      }
+    },
+    "submit_meter_reading": {
+      "name": "Submit meter reading to SSE",
+      "description": "Send a meter reading to SSE Airtricity. Requires confirm. SSE accepts one per 24 hours.",
+      "fields": {
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be true. Nothing is sent otherwise."
+        },
+        "day": {
+          "name": "Day reading",
+          "description": "Defaults to the reading shown in the Day reading to submit box."
+        },
+        "night": {
+          "name": "Night reading",
+          "description": "Defaults to the reading shown in the Night reading to submit box."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Send even if it differs from the running estimate by more than the safety margin."
+        }
+      }
+    },
+    "add_tariff": {
+      "name": "Add tariff",
+      "description": "Prices for a period (incl. VAT), in the past or the future. Hours in it are re-priced at once.",
+      "fields": {
+        "valid_from": {
+          "name": "From",
+          "description": "First day the prices apply."
+        },
+        "valid_to": {
+          "name": "To",
+          "description": "Optional last day; what applied after it carries on from the day after."
+        },
+        "day_rate": {
+          "name": "Day rate",
+          "description": "c/kWh incl. VAT."
+        },
+        "night_rate": {
+          "name": "Night rate",
+          "description": "c/kWh incl. VAT."
+        },
+        "standing_charge": {
+          "name": "Standing charge",
+          "description": "€/year incl. VAT."
+        },
+        "pso_levy": {
+          "name": "PSO levy",
+          "description": "€/year incl. VAT."
+        },
+        "night_start": {
+          "name": "Night starts",
+          "description": "Hour."
+        },
+        "night_end": {
+          "name": "Night ends",
+          "description": "Hour."
+        },
+        "night_clock": {
+          "name": "Night clock",
+          "description": "gmt (day/night meter) or local (smart tariff)."
+        },
+        "supplier": {
+          "name": "Supplier",
+          "description": "Supplier name."
+        },
+        "plan": {
+          "name": "Plan",
+          "description": "Plan name."
+        }
+      }
+    },
+    "supply_esb_session": {
+      "name": "Supply ESB session",
+      "description": "Hand over a browser session after signing in to ESB Networks yourself (when a CAPTCHA blocks the integration).",
+      "fields": {
+        "cookie": {
+          "name": "Cookie header",
+          "description": "The Cookie header from your signed-in browser."
+        }
+      }
+    },
+    "export_csv": {
+      "name": "Export data",
+      "description": "Write every table of the database to CSV files under <config>/electricity_analyzer/exports/.",
+      "fields": {
+        "backup": {
+          "name": "Also back up now",
+          "description": "Take a database backup at the same time."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "tariff_band": {
+        "name": "Tariff band",
+        "state": {
+          "day": "Day rate",
+          "night": "Night rate"
+        }
+      },
+      "esb_status": {
+        "name": "ESB status",
+        "state": {
+          "off": "Off",
+          "ok": "Up to date",
+          "error": "Error",
+          "waiting": "Waiting for first fetch",
+          "retrying": "Waiting 12 h to retry"
+        }
+      },
+      "sse_status": {
+        "name": "SSE status",
+        "state": {
+          "off": "Off",
+          "dry_run": "Dry run (never sends)",
+          "ready": "Ready to send",
+          "cooldown": "Sent in the last 24 h",
+          "error": "Last attempt failed",
+          "retrying": "Waiting 12 h to retry"
+        }
+      }
+    }
+  }
+}

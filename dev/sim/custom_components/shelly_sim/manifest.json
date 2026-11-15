@@ -1,0 +1,12 @@
+{
+  "domain": "shelly_sim",
+  "name": "Shelly EM Gen4 simulator (dev only)",
+  "codeowners": [],
+  "config_flow": false,
+  "dependencies": ["recorder"],
+  "documentation": "https://example.invalid/dev/sim/README.md",
+  "integration_type": "device",
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "0.1.0"
+}
